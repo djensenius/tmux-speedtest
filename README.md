@@ -6,6 +6,11 @@ A tmux plugin to run internet speed tests and display results in your status bar
 
 ## Screenshots
 
+### Idle:
+
+<img width="60" height="27" alt="Screenshot 2026-02-01 at 12 31 51 PM" src="https://github.com/user-attachments/assets/9010b068-d638-4771-80a3-d4e48e8af662" />
+
+
 ### Waiting for results:
 
 <img width="156" height="25" alt="Screenshot 2026-02-01 at 12 27 52 PM" src="https://github.com/user-attachments/assets/d2eab7b3-0d04-4ca3-80ff-b7d5bce63e6f" />
