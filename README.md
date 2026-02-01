@@ -138,6 +138,32 @@ set -g @speedtest_format '🌐 ⬇#{download} ⬆#{upload} 📶#{ping}'
 set -g @speedtest_format 'D:#{download} U:#{upload} P:#{ping}'
 ```
 
+### Catppuccin Theme Integration
+
+If you're using [catppuccin/tmux](https://github.com/catppuccin/tmux), create a custom module file:
+
+**`~/.config/tmux/custom_modules/ctp_speedtest.conf`:**
+```bash
+# vim:set ft=tmux:
+%hidden MODULE_NAME='ctp_speedtest'
+
+set-option -gq "@catppuccin_${MODULE_NAME}_icon" '󰓅 '
+set-option -gq "@catppuccin_${MODULE_NAME}_color" '#{E:@thm_teal}'
+set-option -gq "@catppuccin_${MODULE_NAME}_text" '#(~/.tmux/plugins/tmux-speedtest/scripts/speedtest_status.sh)'
+
+source-file -F '#{TMUX_PLUGIN_MANAGER_PATH}/tmux/utils/status_module.conf'
+```
+
+Then in your `~/.tmux.conf`:
+```bash
+# Source the custom module
+source -F '#{HOME}/.config/tmux/custom_modules/ctp_speedtest.conf'
+
+# Add to your status bar
+set -g status-left '#{E:@catppuccin_status_session}'
+set -ag status-left '#{E:@catppuccin_status_ctp_speedtest}'
+```
+
 ## Troubleshooting
 
 ### "No CLI found" error
