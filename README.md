@@ -103,8 +103,8 @@ set -g @speedtest_format '↓ #{download} ↑ #{upload} #{ping}'
 # Icon shown while test is running (default: ⏳)
 set -g @speedtest_icon_running '⏳'
 
-# Icon shown when no result yet (default: empty)
-set -g @speedtest_icon_idle ''
+# Icon shown when no result yet (default: —)
+set -g @speedtest_icon_idle '—'
 
 # Speedtest provider: auto, ookla, fast, or sivel (default: auto)
 set -g @speedtest_provider 'auto'

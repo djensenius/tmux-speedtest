@@ -12,7 +12,7 @@ tmux bind-key "$KEY" run-shell -b "$CURRENT_DIR/scripts/speedtest.sh"
 
 # Set up status bar interpolation
 # This allows users to use #{speedtest_result} in their status bar
-tmux set-option -gq @speedtest_result "$(get_tmux_option "@speedtest_icon_idle" "")"
+tmux set-option -gq @speedtest_result "$(get_tmux_option "@speedtest_icon_idle" "—")"
 
 # Register the format interpolation
 # tmux will call the script whenever it needs to render #{speedtest_result}

@@ -6,7 +6,7 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
 
-ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "")
+ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "—")
 RESULT=$(get_tmux_option "@speedtest_result" "$ICON_IDLE")
 
 echo "$RESULT"

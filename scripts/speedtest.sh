@@ -25,7 +25,7 @@ run_speedtest_background() {
     # Configuration
     FORMAT=$(get_tmux_option "@speedtest_format" "↓ #{download} ↑ #{upload} #{ping}")
     ICON_RUNNING=$(get_tmux_option "@speedtest_icon_running" "⏳")
-    ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "")
+    ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "—")
     SERVER=$(get_tmux_option "@speedtest_server" "")
 
     # Store current result (to restore on failure)
