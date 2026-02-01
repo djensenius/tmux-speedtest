@@ -40,7 +40,12 @@ run_speedtest() {
         fi
         eval "$cmd" 2>/dev/null
     else
-        local cmd="speedtest-cli --json"
+        # sivel: prefer speedtest-cli if available, fallback to speedtest
+        local speedtest_cmd="speedtest-cli"
+        if ! command -v speedtest-cli &>/dev/null; then
+            speedtest_cmd="speedtest"
+        fi
+        local cmd="$speedtest_cmd --json"
         if [[ -n "$server_id" ]]; then
             cmd="$cmd --server=$server_id"
         fi
@@ -70,15 +75,15 @@ parse_results() {
     if [[ "$cli" == "ookla" ]]; then
         # Ookla JSON structure:
         # { "download": { "bandwidth": <bytes/s> }, "upload": { "bandwidth": <bytes/s> }, "ping": { "latency": <ms> } }
-        download=$(echo "$json" | grep -o '"download"[^}]*}' | grep -o '"bandwidth":[0-9.]*' | cut -d: -f2)
-        upload=$(echo "$json" | grep -o '"upload"[^}]*}' | grep -o '"bandwidth":[0-9.]*' | cut -d: -f2)
-        ping_val=$(echo "$json" | grep -o '"ping"[^}]*}' | grep -o '"latency":[0-9.]*' | cut -d: -f2)
+        download=$(echo "$json" | grep -oE '"bandwidth":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        upload=$(echo "$json" | grep -oE '"bandwidth":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
+        ping_val=$(echo "$json" | grep -oE '"latency":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
     else
         # sivel JSON structure:
         # { "download": <bits/s>, "upload": <bits/s>, "ping": <ms> }
-        download=$(echo "$json" | grep -o '"download":[0-9.]*' | cut -d: -f2)
-        upload=$(echo "$json" | grep -o '"upload":[0-9.]*' | cut -d: -f2)
-        ping_val=$(echo "$json" | grep -o '"ping":[0-9.]*' | cut -d: -f2)
+        download=$(echo "$json" | grep -oE '"download":\s*[0-9.]+' | grep -oE '[0-9.]+')
+        upload=$(echo "$json" | grep -oE '"upload":\s*[0-9.]+' | grep -oE '[0-9.]+')
+        ping_val=$(echo "$json" | grep -oE '"ping":\s*[0-9.]+' | grep -oE '[0-9.]+')
     fi
 
     echo "$download $upload $ping_val"

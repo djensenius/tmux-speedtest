@@ -21,29 +21,59 @@ set_tmux_option() {
     tmux set-option -gq "$option" "$value"
 }
 
+# Check if a speedtest command is the Ookla binary or sivel Python script
+# Returns: "ookla", "sivel", or "unknown"
+identify_speedtest_type() {
+    local cmd="$1"
+
+    # Check if it supports --format=json (Ookla-specific flag)
+    if "$cmd" --help 2>&1 | grep -q -- '--format'; then
+        echo "ookla"
+    # Check if it supports --json (sivel-specific flag)
+    elif "$cmd" --help 2>&1 | grep -q -- '--json'; then
+        echo "sivel"
+    else
+        echo "unknown"
+    fi
+}
+
 # Detect available speedtest CLI
 # Returns: "ookla", "sivel", or "none"
 detect_speedtest_cli() {
     local prefer
     prefer=$(get_tmux_option "@speedtest_prefer" "auto")
 
+    # If user explicitly prefers one, try to find and verify it
     if [[ "$prefer" == "ookla" ]]; then
         if command -v speedtest &>/dev/null; then
-            echo "ookla"
-            return
+            local type
+            type=$(identify_speedtest_type speedtest)
+            if [[ "$type" == "ookla" ]]; then
+                echo "ookla"
+                return
+            fi
         fi
     elif [[ "$prefer" == "sivel" ]]; then
+        # Check speedtest-cli first, then speedtest
         if command -v speedtest-cli &>/dev/null; then
             echo "sivel"
             return
+        elif command -v speedtest &>/dev/null; then
+            local type
+            type=$(identify_speedtest_type speedtest)
+            if [[ "$type" == "sivel" ]]; then
+                echo "sivel"
+                return
+            fi
         fi
     fi
 
-    # Auto-detect: prefer ookla, fallback to sivel
-    if command -v speedtest &>/dev/null; then
-        echo "ookla"
-    elif command -v speedtest-cli &>/dev/null; then
+    # Auto-detect: check speedtest-cli first (unambiguous), then speedtest
+    if command -v speedtest-cli &>/dev/null; then
         echo "sivel"
+    elif command -v speedtest &>/dev/null; then
+        # speedtest could be either - identify it
+        identify_speedtest_type speedtest
     else
         echo "none"
     fi
