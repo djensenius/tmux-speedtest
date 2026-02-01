@@ -37,46 +37,102 @@ identify_speedtest_type() {
     fi
 }
 
-# Detect available speedtest CLI
-# Returns: "ookla", "sivel", or "none"
+# Find the Ookla speedtest binary (checking common locations)
+find_ookla_binary() {
+    # Check Homebrew opt path first (handles shadowing by Python version)
+    local brew_path="/opt/homebrew/opt/speedtest/bin/speedtest"
+    if [[ -x "$brew_path" ]]; then
+        local type
+        type=$(identify_speedtest_type "$brew_path")
+        if [[ "$type" == "ookla" ]]; then
+            echo "$brew_path"
+            return
+        fi
+    fi
+
+    # Check Intel Homebrew path
+    local brew_intel_path="/usr/local/opt/speedtest/bin/speedtest"
+    if [[ -x "$brew_intel_path" ]]; then
+        local type
+        type=$(identify_speedtest_type "$brew_intel_path")
+        if [[ "$type" == "ookla" ]]; then
+            echo "$brew_intel_path"
+            return
+        fi
+    fi
+
+    # Check if speedtest in PATH is Ookla
+    if command -v speedtest &>/dev/null; then
+        local type
+        type=$(identify_speedtest_type speedtest)
+        if [[ "$type" == "ookla" ]]; then
+            echo "speedtest"
+            return
+        fi
+    fi
+
+    echo ""
+}
+
+# Find the sivel speedtest-cli binary
+find_sivel_binary() {
+    if command -v speedtest-cli &>/dev/null; then
+        echo "speedtest-cli"
+        return
+    fi
+
+    # Check if speedtest in PATH is sivel
+    if command -v speedtest &>/dev/null; then
+        local type
+        type=$(identify_speedtest_type speedtest)
+        if [[ "$type" == "sivel" ]]; then
+            echo "speedtest"
+            return
+        fi
+    fi
+
+    echo ""
+}
+
+# Detect available speedtest CLI and return the command to use
+# Returns: "ookla:<cmd>", "sivel:<cmd>", or "none"
 detect_speedtest_cli() {
     local prefer
     prefer=$(get_tmux_option "@speedtest_prefer" "auto")
 
-    # If user explicitly prefers one, try to find and verify it
+    # If user explicitly prefers one, try to find it
     if [[ "$prefer" == "ookla" ]]; then
-        if command -v speedtest &>/dev/null; then
-            local type
-            type=$(identify_speedtest_type speedtest)
-            if [[ "$type" == "ookla" ]]; then
-                echo "ookla"
-                return
-            fi
+        local ookla_cmd
+        ookla_cmd=$(find_ookla_binary)
+        if [[ -n "$ookla_cmd" ]]; then
+            echo "ookla:$ookla_cmd"
+            return
         fi
     elif [[ "$prefer" == "sivel" ]]; then
-        # Check speedtest-cli first, then speedtest
-        if command -v speedtest-cli &>/dev/null; then
-            echo "sivel"
+        local sivel_cmd
+        sivel_cmd=$(find_sivel_binary)
+        if [[ -n "$sivel_cmd" ]]; then
+            echo "sivel:$sivel_cmd"
             return
-        elif command -v speedtest &>/dev/null; then
-            local type
-            type=$(identify_speedtest_type speedtest)
-            if [[ "$type" == "sivel" ]]; then
-                echo "sivel"
-                return
-            fi
         fi
     fi
 
-    # Auto-detect: check speedtest-cli first (unambiguous), then speedtest
-    if command -v speedtest-cli &>/dev/null; then
-        echo "sivel"
-    elif command -v speedtest &>/dev/null; then
-        # speedtest could be either - identify it
-        identify_speedtest_type speedtest
-    else
-        echo "none"
+    # Auto-detect: prefer Ookla (more reliable), fallback to sivel
+    local ookla_cmd
+    ookla_cmd=$(find_ookla_binary)
+    if [[ -n "$ookla_cmd" ]]; then
+        echo "ookla:$ookla_cmd"
+        return
     fi
+
+    local sivel_cmd
+    sivel_cmd=$(find_sivel_binary)
+    if [[ -n "$sivel_cmd" ]]; then
+        echo "sivel:$sivel_cmd"
+        return
+    fi
+
+    echo "none"
 }
 
 # Format speed with auto-scaling (bps to Mbps/Gbps)

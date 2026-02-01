@@ -7,11 +7,13 @@ A tmux plugin to run internet speed tests and display results in your status bar
 ## Features
 
 - Run speedtest with a single keypress (`prefix + o` by default)
+- **Non-blocking** - tmux remains fully responsive while test runs
 - Results persist in status bar until next test
 - Auto-detects available CLI (Ookla `speedtest` or `speedtest-cli`)
 - Auto-scales units (Mbps/Gbps)
 - Fully configurable format, icons, and key bindings
 - Shows progress indicator while running
+- Prevents multiple concurrent tests
 
 ## Requirements
 
@@ -25,12 +27,15 @@ One of the following speedtest CLI tools must be installed:
 **Ookla (recommended):**
 ```bash
 # macOS
+brew tap teamookla/speedtest
 brew install speedtest
 
 # Linux (Debian/Ubuntu)
 curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
 sudo apt install speedtest
 ```
+
+> **Note:** If you have both `speedtest-cli` (Python) and Ookla's `speedtest` installed, the plugin will prefer the Ookla version as it's more reliable.
 
 **speedtest-cli:**
 ```bash

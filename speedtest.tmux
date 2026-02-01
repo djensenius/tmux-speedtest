@@ -7,8 +7,8 @@ source "$CURRENT_DIR/scripts/helpers.sh"
 # Get user configuration
 KEY=$(get_tmux_option "@speedtest_key" "o")
 
-# Set up key binding
-tmux bind-key "$KEY" run-shell "$CURRENT_DIR/scripts/speedtest.sh"
+# Set up key binding (use -b for background/non-blocking execution)
+tmux bind-key "$KEY" run-shell -b "$CURRENT_DIR/scripts/speedtest.sh"
 
 # Set up status bar interpolation
 # This allows users to use #{speedtest_result} in their status bar

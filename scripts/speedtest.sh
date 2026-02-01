@@ -3,105 +3,111 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
 
-# Configuration
-FORMAT=$(get_tmux_option "@speedtest_format" "↓ #{download} ↑ #{upload} #{ping}")
-ICON_RUNNING=$(get_tmux_option "@speedtest_icon_running" "⏳")
-ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "")
-SERVER=$(get_tmux_option "@speedtest_server" "")
-
-# Store current result (to restore on failure)
-PREVIOUS_RESULT=$(get_tmux_option "@speedtest_result" "$ICON_IDLE")
-
-# Show running indicator
-set_tmux_option "@speedtest_result" "$ICON_RUNNING Testing..."
-tmux refresh-client -S
-
-# Detect CLI
-CLI=$(detect_speedtest_cli)
-
-if [[ "$CLI" == "none" ]]; then
-    tmux display-message "speedtest: No CLI found (install speedtest or speedtest-cli)"
-    # Revert to previous result after short delay
-    sleep 2
-    set_tmux_option "@speedtest_result" "$PREVIOUS_RESULT"
-    tmux refresh-client -S
-    exit 1
-fi
-
-# Build command based on CLI type
-run_speedtest() {
-    local cli="$1"
-    local server_id="$2"
-
-    if [[ "$cli" == "ookla" ]]; then
-        local cmd="speedtest --format=json --accept-license --accept-gdpr"
-        if [[ -n "$server_id" ]]; then
-            cmd="$cmd --server-id=$server_id"
-        fi
-        eval "$cmd" 2>/dev/null
+# Check if already running (prevent multiple concurrent tests)
+LOCK_FILE="/tmp/tmux-speedtest.lock"
+if [[ -f "$LOCK_FILE" ]]; then
+    # Check if the process is still running
+    if kill -0 "$(cat "$LOCK_FILE")" 2>/dev/null; then
+        tmux display-message "speedtest: Already running..."
+        exit 0
     else
-        # sivel: prefer speedtest-cli if available, fallback to speedtest
-        local speedtest_cmd="speedtest-cli"
-        if ! command -v speedtest-cli &>/dev/null; then
-            speedtest_cmd="speedtest"
-        fi
-        local cmd="$speedtest_cmd --json"
-        if [[ -n "$server_id" ]]; then
-            cmd="$cmd --server=$server_id"
-        fi
-        eval "$cmd" 2>/dev/null
+        # Stale lock file, remove it
+        rm -f "$LOCK_FILE"
     fi
-}
-
-# Run speedtest and capture output
-OUTPUT=$(run_speedtest "$CLI" "$SERVER")
-EXIT_CODE=$?
-
-if [[ $EXIT_CODE -ne 0 || -z "$OUTPUT" ]]; then
-    tmux display-message "speedtest: Test failed"
-    sleep 2
-    set_tmux_option "@speedtest_result" "$PREVIOUS_RESULT"
-    tmux refresh-client -S
-    exit 1
 fi
 
-# Parse results based on CLI type
-parse_results() {
-    local cli="$1"
-    local json="$2"
+# Run the actual speedtest in background
+run_speedtest_background() {
+    # Write PID to lock file
+    echo $$ > "$LOCK_FILE"
+    trap 'rm -f "$LOCK_FILE"' EXIT
 
+    # Configuration
+    FORMAT=$(get_tmux_option "@speedtest_format" "↓ #{download} ↑ #{upload} #{ping}")
+    ICON_RUNNING=$(get_tmux_option "@speedtest_icon_running" "⏳")
+    ICON_IDLE=$(get_tmux_option "@speedtest_icon_idle" "")
+    SERVER=$(get_tmux_option "@speedtest_server" "")
+
+    # Store current result (to restore on failure)
+    PREVIOUS_RESULT=$(get_tmux_option "@speedtest_result" "$ICON_IDLE")
+
+    # Show running indicator
+    set_tmux_option "@speedtest_result" "$ICON_RUNNING Testing..."
+    tmux refresh-client -S
+
+    # Detect CLI - returns "type:command" (e.g., "ookla:/opt/homebrew/opt/speedtest/bin/speedtest")
+    CLI_RESULT=$(detect_speedtest_cli)
+
+    if [[ "$CLI_RESULT" == "none" ]]; then
+        tmux display-message "speedtest: No CLI found (install speedtest or speedtest-cli)"
+        sleep 2
+        set_tmux_option "@speedtest_result" "$PREVIOUS_RESULT"
+        tmux refresh-client -S
+        exit 1
+    fi
+
+    # Parse CLI type and command
+    CLI_TYPE="${CLI_RESULT%%:*}"
+    CLI_CMD="${CLI_RESULT#*:}"
+
+    # Run speedtest based on CLI type
+    if [[ "$CLI_TYPE" == "ookla" ]]; then
+        local cmd="\"$CLI_CMD\" --format=json --accept-license --accept-gdpr"
+        if [[ -n "$SERVER" ]]; then
+            cmd="$cmd --server-id=$SERVER"
+        fi
+        OUTPUT=$(eval "$cmd" 2>/dev/null)
+    else
+        local cmd="\"$CLI_CMD\" --json"
+        if [[ -n "$SERVER" ]]; then
+            cmd="$cmd --server=$SERVER"
+        fi
+        OUTPUT=$(eval "$cmd" 2>/dev/null)
+    fi
+    EXIT_CODE=$?
+
+    if [[ $EXIT_CODE -ne 0 || -z "$OUTPUT" ]]; then
+        tmux display-message "speedtest: Test failed"
+        sleep 2
+        set_tmux_option "@speedtest_result" "$PREVIOUS_RESULT"
+        tmux refresh-client -S
+        exit 1
+    fi
+
+    # Parse results based on CLI type
     local download upload ping_val
 
-    if [[ "$cli" == "ookla" ]]; then
+    if [[ "$CLI_TYPE" == "ookla" ]]; then
         # Ookla JSON structure:
         # { "download": { "bandwidth": <bytes/s> }, "upload": { "bandwidth": <bytes/s> }, "ping": { "latency": <ms> } }
-        download=$(echo "$json" | grep -oE '"bandwidth":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
-        upload=$(echo "$json" | grep -oE '"bandwidth":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
-        ping_val=$(echo "$json" | grep -oE '"latency":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        download=$(echo "$OUTPUT" | grep -oE '"bandwidth":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        upload=$(echo "$OUTPUT" | grep -oE '"bandwidth":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
+        ping_val=$(echo "$OUTPUT" | grep -oE '"latency":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
     else
         # sivel JSON structure:
         # { "download": <bits/s>, "upload": <bits/s>, "ping": <ms> }
-        download=$(echo "$json" | grep -oE '"download":\s*[0-9.]+' | grep -oE '[0-9.]+')
-        upload=$(echo "$json" | grep -oE '"upload":\s*[0-9.]+' | grep -oE '[0-9.]+')
-        ping_val=$(echo "$json" | grep -oE '"ping":\s*[0-9.]+' | grep -oE '[0-9.]+')
+        download=$(echo "$OUTPUT" | grep -oE '"download":\s*[0-9.]+' | grep -oE '[0-9.]+')
+        upload=$(echo "$OUTPUT" | grep -oE '"upload":\s*[0-9.]+' | grep -oE '[0-9.]+')
+        ping_val=$(echo "$OUTPUT" | grep -oE '"ping":\s*[0-9.]+' | grep -oE '[0-9.]+')
     fi
 
-    echo "$download $upload $ping_val"
+    # Format values
+    DOWNLOAD_FMT=$(format_speed "$download" "$CLI_TYPE")
+    UPLOAD_FMT=$(format_speed "$upload" "$CLI_TYPE")
+    PING_FMT=$(format_ping "$ping_val")
+
+    # Build result string
+    RESULT=$(build_result_string "$FORMAT" "$DOWNLOAD_FMT" "$UPLOAD_FMT" "$PING_FMT")
+
+    # Update status bar
+    set_tmux_option "@speedtest_result" "$RESULT"
+    tmux refresh-client -S
+
+    tmux display-message "speedtest: Done - $RESULT"
 }
 
-# Parse the output
-read -r DOWNLOAD UPLOAD PING <<< "$(parse_results "$CLI" "$OUTPUT")"
+# Launch in background and detach
+run_speedtest_background &
+disown
 
-# Format values
-DOWNLOAD_FMT=$(format_speed "$DOWNLOAD" "$CLI")
-UPLOAD_FMT=$(format_speed "$UPLOAD" "$CLI")
-PING_FMT=$(format_ping "$PING")
-
-# Build result string
-RESULT=$(build_result_string "$FORMAT" "$DOWNLOAD_FMT" "$UPLOAD_FMT" "$PING_FMT")
-
-# Update status bar
-set_tmux_option "@speedtest_result" "$RESULT"
-tmux refresh-client -S
-
-tmux display-message "speedtest: Done"
+tmux display-message "speedtest: Starting..."
