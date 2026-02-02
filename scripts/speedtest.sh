@@ -106,10 +106,24 @@ run_speedtest_background() {
         ping_val=$(echo "$OUTPUT" | grep -oE '"latency":\s*[0-9.]+' | grep -oE '[0-9.]+')
     elif [[ "$CLI_TYPE" == "cloudflare" ]]; then
         # cloudflare-speed-cli JSON structure:
-        # { "download": { "mbps": <val> }, "upload": { "mbps": <val> }, "idle_latency": { "median_ms": <val> } }
-        download=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
-        upload=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
-        ping_val=$(echo "$OUTPUT" | grep -oE '"median_ms":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        # Use python for robust JSON parsing
+        if command -v python3 &>/dev/null; then
+             PYTHON_CMD="python3"
+        elif command -v python &>/dev/null; then
+             PYTHON_CMD="python"
+        fi
+
+        if [[ -n "$PYTHON_CMD" ]]; then
+            # Use '<<< "$OUTPUT"' to pass string to stdin, avoiding echo pipe issues or content display
+            download=$($PYTHON_CMD -c "import sys, json; print(json.load(sys.stdin).get('download', {}).get('mbps', 0))" <<< "$OUTPUT")
+            upload=$($PYTHON_CMD -c "import sys, json; print(json.load(sys.stdin).get('upload', {}).get('mbps', 0))" <<< "$OUTPUT")
+            ping_val=$($PYTHON_CMD -c "import sys, json; print(json.load(sys.stdin).get('idle_latency', {}).get('median_ms', 0))" <<< "$OUTPUT")
+        else
+            # Fallback to grep if no python (less robust)
+            download=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+            upload=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
+            ping_val=$(echo "$OUTPUT" | grep -oE '"median_ms":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        fi
     else
         # sivel JSON structure:
         # { "download": <bits/s>, "upload": <bits/s>, "ping": <ms> }
