@@ -29,7 +29,13 @@ run_speedtest_background() {
     SERVER=$(get_tmux_option "@speedtest_server" "")
 
     # Store current result (to restore on failure)
-    PREVIOUS_RESULT=$(get_tmux_option "@speedtest_result" "$ICON_IDLE")
+    # If currently hidden (empty), use idle icon as fallback
+    CURRENT_VAL=$(get_tmux_option "@speedtest_result" "")
+    if [[ -z "$CURRENT_VAL" ]]; then
+        PREVIOUS_RESULT="$ICON_IDLE"
+    else
+        PREVIOUS_RESULT="$CURRENT_VAL"
+    fi
 
     # Show running indicator
     set_tmux_option "@speedtest_result" "$ICON_RUNNING Testing..."
@@ -60,6 +66,10 @@ run_speedtest_background() {
     elif [[ "$CLI_TYPE" == "fast" ]]; then
         # fast-cli (Netflix fast.com)
         local cmd="\"$CLI_CMD\" --json --upload"
+        OUTPUT=$(eval "$cmd" 2>/dev/null)
+    elif [[ "$CLI_TYPE" == "cloudflare" ]]; then
+        # cloudflare-speed-cli
+        local cmd="\"$CLI_CMD\" --json"
         OUTPUT=$(eval "$cmd" 2>/dev/null)
     else
         # sivel speedtest-cli
@@ -94,6 +104,12 @@ run_speedtest_background() {
         download=$(echo "$OUTPUT" | grep -oE '"downloadSpeed":\s*[0-9.]+' | grep -oE '[0-9.]+')
         upload=$(echo "$OUTPUT" | grep -oE '"uploadSpeed":\s*[0-9.]+' | grep -oE '[0-9.]+')
         ping_val=$(echo "$OUTPUT" | grep -oE '"latency":\s*[0-9.]+' | grep -oE '[0-9.]+')
+    elif [[ "$CLI_TYPE" == "cloudflare" ]]; then
+        # cloudflare-speed-cli JSON structure:
+        # { "download": { "mbps": <val> }, "upload": { "mbps": <val> }, "idle_latency": { "median_ms": <val> } }
+        download=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
+        upload=$(echo "$OUTPUT" | grep -oE '"mbps":\s*[0-9.]+' | tail -1 | grep -oE '[0-9.]+')
+        ping_val=$(echo "$OUTPUT" | grep -oE '"median_ms":\s*[0-9.]+' | head -1 | grep -oE '[0-9.]+')
     else
         # sivel JSON structure:
         # { "download": <bits/s>, "upload": <bits/s>, "ping": <ms> }
